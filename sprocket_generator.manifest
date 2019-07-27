@@ -1,0 +1,10 @@
+{
+	"autodeskProduct":	"Fusion360",
+	"type":	"script",
+	"author":	"Kyle Diaz",
+	"description":	{
+		"":	"Creates a sprocket from given parameters"
+	},
+	"supportedOS":	"windows|mac",
+	"editEnabled":	true
+}
