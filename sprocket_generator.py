@@ -4,7 +4,7 @@
 import adsk.core, adsk.fusion, adsk.cam, traceback
 import math
 
-class SprocketMath:
+class Sprocket:
     # the names used in here follow the convention used in  "Chains for Power Transmission
     # and Material Handling handbook", which is considered the industry standard
     def __init__(self, chain_pitch, number_of_teeth, roller_diameter):
@@ -46,11 +46,14 @@ class SprocketMath:
         return self.P / 2 * math.cos(180 / self.N) + self.H * math.sin(180 / self.N)
     def PD(self):
         return self.P / math.sin(180 / self.N)
-    
-        
+  
 
-class Sprocket:
-    pass
+class SprocketComponent(Sprocket):
+    def __init__(self, chain_pitch, number_of_teeth, roller_diameter):
+        super.__init__(chain_pitch, number_of_teeth, roller_diameter)
+    def build_sprocket(self):
+        pass
+
 
 def run(context):
     ui = None
