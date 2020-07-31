@@ -1,23 +1,27 @@
 # Sprocket Generator
-A python script for Autodesk Fusion 360 that will generate the sketch for a
-sprocket using parameters given to it
 
-Based off [Designing and Drawing a Sprocket](http://www.gearseds.com/files/design_draw_sprocket_5.pdf)
+![](./doc/thumbnail.png)
+
+A python script for Autodesk Fusion 360 that will create a sprocket used for roller chains based off the chain pitch, roller diameter, and the number of teeth on the sprocket.
+
+Originally based off [Designing and Drawing a Sprocket](http://www.gearseds.com/files/design_draw_sprocket_5.pdf), but switched to [Instructables How to Draw a Sprocket Gear](https://www.instructables.com/id/How-to-Draw-a-Sprocket-Gear/).
 
 # How to use
-Clone this repo into C:\Users\$USER\AppData\Roaming\Autodesk\Autodesk Fusion 360\API\Scripts\
 
-The script can be run from the Scripts menu in Fusion.
+Clone or download this project
 
-![](doc/script-tool-bar.jpg)
+Open the Scripts and Add-Ins menu in Fusion.
 
-When run, there will be a dialogue box asking for the parameter.
+![](./doc/script_tool_bar.jpg)
 
-![](doc/dialogue.jpg)
+Click on the green plus sign next to 'My Script'. A file dialogue will appear. Select the sprocket_generator folder.
 
-This script follows
-[Designing and Drawing a Sprocket](http://www.gearseds.com/files/design_draw_sprocket_5.pdf)
-up to step 14. The user needs to follow the instructions starting at step 15.
+![](./doc/script_dialogue.png)
 
-I don't think the Fusion 360 API is capable of trimming, so I will have to
-eventually rework this program to fully automate making the sketch.
+When run, there will be a dialogue box asking for the parameters.
+
+![](./doc/dialogue.png)
+
+Note: Not all combinations of values work.
+
+Pressing OK will generate the sprocket
