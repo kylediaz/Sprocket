@@ -3,7 +3,7 @@
 	"type":	"script",
 	"author":	"Kyle Diaz",
 	"description":	{
-		"":	"Creates a sprocket from given parameters"
+		"":	"Creates a roller chain sprocket"
 	},
 	"supportedOS":	"windows|mac",
 	"editEnabled":	true

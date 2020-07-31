@@ -6,19 +6,20 @@ import adsk.fusion
 import adsk.cam
 import traceback
 import math
-from sprocket import Sprocket
 
 # Gobal variables used to maintain a reference to all event handlers
 handlers = []
+
 app = adsk.core.Application.get()
 if app:
     ui = app.userInterface
     unitsMgr = app.activeProduct.unitsManager
 
 default_sprocket_name = "Sprocket"
-default_chain_pitch = 0.635  # cm, .25 in
-default_number_of_teeth = 30
-default_roller_diameter = 0.3302  # cm, .130 in
+default_chain_pitch = 1.27  # cm, .5 in
+default_number_of_teeth = 40
+default_roller_diameter = 0.79502  # cm, .313 in
+default_thickness = 0.635  # cm
 
 
 def createNewComponent():
@@ -30,161 +31,132 @@ def createNewComponent():
     return newOcc.component
 
 
-class SprocketComponent(Sprocket):
+class SprocketComponent:
 
-    def __init__(self, name, chain_pitch, number_of_teeth, roller_diameter):
-        super().__init__(chain_pitch, number_of_teeth, roller_diameter)
-        self._name = name
-
-    def build_sprocket(self):
-        newComp = createNewComponent()
-        if newComp is None:
+    def __init__(self, name, chain_pitch, number_of_teeth, roller_diameter, thickness):
+        self.name = name
+        self.chain_pitch = chain_pitch
+        self.number_of_teeth = number_of_teeth
+        self.roller_diameter = roller_diameter
+        self.thickness = thickness
+        self._comp = createNewComponent()
+        if self._comp is None:
             ui.messageBox('New component failed to create',
                           'New Component Failed')
             return
+        else:
+            self._comp.name = self.name
 
-        sketches = newComp.sketches
-        plane = newComp.xYConstructionPlane
-        base_sketch = sketches.add(plane)
-        sketch_curves = base_sketch.sketchCurves
-        sketch_points = base_sketch.sketchPoints
-        sketch_dimensions = base_sketch.sketchDimensions
-        constraints = base_sketch.geometricConstraints
+    def __arc1_center_x(self):
+        return self.chain_pitch / (2 * math.tan(math.pi / self.number_of_teeth))
 
-        origin = sketch_points.add(adsk.core.Point3D.create(0, 0, 0))
-        origin.isFixed = True
+    def __arc1_radius(self):
+        return (self.roller_diameter + .005) / 2
 
-        # start of creating sketch here
-        # the "steps" refered to in the comments are based on "Designing and Drawing a Sprocket"
-        # A link to the document is in the README
+    def __create_arc1s(self, sketch):
+        center_x = self.__arc1_center_x()
+        center_dy = .5 * self.chain_pitch
 
-        # 3
-        pitch_circle_radius = .5 * self.PD()
-        pitch_circle = sketch_curves.sketchCircles.addByCenterRadius(
-            origin, pitch_circle_radius)
-        sketch_dimensions.addDiameterDimension(
-            pitch_circle, adsk.core.Point3D.create(0, pitch_circle_radius / 2, 0), True)
-        pitch_circle.isConstruction = True
+        top_arc_center = adsk.core.Point3D.create(center_x, center_dy, 0)
+        bottom_arc_center = adsk.core.Point3D.create(center_x, -center_dy, 0)
 
-        #4, 5
-        line12 = sketch_curves.sketchLines.addByTwoPoints(
-            origin, adsk.core.Point3D.create(0, pitch_circle_radius * 2, 0))
-        line34 = sketch_curves.sketchLines.addByTwoPoints(
-            adsk.core.Point3D.create(
-                pitch_circle_radius, pitch_circle_radius, 0),
-            adsk.core.Point3D.create(-pitch_circle_radius, pitch_circle_radius, 0))
-        line12.isConstruction = True
-        line34.isConstruction = True
-        constraints.addVertical(line12)
-        constraints.addHorizontal(line34)
-        constraints.addTangent(pitch_circle, line34)
+        radius = self.__arc1_radius()
 
-        # 6
-        circle1_centerpoint = sketch_points.add(
-            adsk.core.Point3D.create(0, pitch_circle_radius, 0))
-        constraints.addCoincident(circle1_centerpoint, line12)
-        constraints.addCoincident(circle1_centerpoint, line34)
-        circle1 = sketch_curves.sketchCircles.addByCenterRadius(
-            circle1_centerpoint, self.R())
+        top_arc_start_point = adsk.core.Point3D.create(
+            center_x - radius, center_dy, 0)
+        bottom_arc_start_point = adsk.core.Point3D.create(
+            center_x - radius, -center_dy, 0)
 
-        # 7
-        line12_offset = sketch_curves.sketchLines.addByTwoPoints(adsk.core.Point3D.create(self.M(), 0, 0),
-                                                                 adsk.core.Point3D.create(self.M(), pitch_circle_radius * 2, 0))
-        line34_offset = sketch_curves.sketchLines.addByTwoPoints(adsk.core.Point3D.create(-pitch_circle_radius, pitch_circle_radius + self.T(), 0),
-                                                                 adsk.core.Point3D.create(pitch_circle_radius, pitch_circle_radius + self.T(), 0))
-        line12_offset.isConstruction = True
-        line34_offset.isConstruction = True
-        constraints.addParallel(line12, line12_offset)
-        constraints.addParallel(line34, line34_offset)
-        sketch_dimensions.addOffsetDimension(line12, line12_offset, adsk.core.Point3D.create(
-            self.M() / 2, pitch_circle_radius - self.M(), 0))
-        sketch_dimensions.addOffsetDimension(
-            line34, line34_offset, adsk.core.Point3D.create(-self.T(), pitch_circle_radius + self.T() / 2, 0))
+        sweep_angle = math.acos((radius - .2 * self.chain_pitch) / radius)
 
-        # 8
-        point_c = sketch_points.add(adsk.core.Point3D.create(
-            self.M(), pitch_circle_radius + self.T(), 0))
-        constraints.addCoincident(point_c, line12_offset)
-        constraints.addCoincident(point_c, line34_offset)
+        sketch_arcs = sketch.sketchCurves.sketchArcs
+        top_arc = sketch_arcs.addByCenterStartSweep(
+            top_arc_center, top_arc_start_point, sweep_angle)
+        bottom_arc = sketch_arcs.addByCenterStartSweep(
+            bottom_arc_center, bottom_arc_start_point, -sweep_angle)
+        return top_arc, bottom_arc
 
-        circle1_radius = self.R()
-        # linecx_length is this because linecx should terminate on the circumference of circle1
-        linecx_length = circle1_radius + \
-            math.sqrt(self.M() ** 2 + self.T() ** 2)
-        point_x_x = self.M() - abs(linecx_length * math.cos(math.radians(self.A())))
-        point_x_y = pitch_circle_radius + self.T() - abs(linecx_length *
-                                                         math.sin(math.radians(self.A())))
-        point_x = sketch_points.add(
-            adsk.core.Point3D.create(point_x_x, point_x_y, 0))
-        linecx = sketch_curves.sketchLines.addByTwoPoints(point_c, point_x)
-        linecx.isConstruction = True
-        constraints.addCoincident(point_x, circle1)
-        sketch_dimensions.addAngularDimension(
-            linecx, line34_offset, adsk.core.Point3D.create(0, pitch_circle_radius, 0))
+    def __create_teeth_tip_line(self, sketch):
+        """returns (top_point, bottom_point), line"""
+        x = self.__arc1_center_x() - self.__arc1_radius() + .6 * self.chain_pitch
+        dy = .05 * self.chain_pitch
 
-        # 9
-        point_y_x = self.M() - abs(self.E() * math.cos(math.radians(self.A() - self.B())))
-        point_y_y = pitch_circle_radius + \
-            self.T() - abs(self.E() * math.sin(math.radians(self.A() - self.B())))
-        point_y = sketch_points.add(
-            adsk.core.Point3D.create(point_y_x, point_y_y, 0))
-        linecy = sketch_curves.sketchLines.addByTwoPoints(point_c, point_y)
-        linecy.isConstruction = True
-        sketch_dimensions.addAngularDimension(
-            linecy, line34_offset, adsk.core.Point3D.create(point_y_x, point_y_y, 0))
-        linecy.isFixed = True
+        top_point = adsk.core.Point3D.create(x, dy, 0)
+        bottom_point = adsk.core.Point3D.create(x, -dy, 0)
+        line = sketch.sketchCurves.sketchLines.addByTwoPoints(
+            top_point, bottom_point)
+        # While I have the top and bottom points already, those are Point3D objects. I need to give SketchPoint because when I create
+        # the arc2s, I need to constrain the arcs to the point, and I can't do that with the Point3D
+        # The SketchPoints are included with the line object, but they are returned separately in a tube to avoid obscurity
+        return (line.startSketchPoint, line.endSketchPoint), line
 
-        # 10
-        # arc is created using ThreePoints because otherwise its endpoints cant be tied to point_x and point_y
-        # middlepoint will be overridden when setting the radius in the next line, so its value doesnt matter
-        arc_xy = sketch_curves.sketchArcs.addByThreePoints(
-            point_x, adsk.core.Point3D.create(point_y_x * .9999, point_y_y * .9999, 0), point_y)
-        arc_xy.radius = self.E()
+    def __create_arc2s(self, sketch, top_arc1, bottom_arc1, top_teeth_tip_point, bottom_teeth_tip_point):
+        sketch_arcs = sketch.sketchCurves.sketchArcs
+        constraints = sketch.geometricConstraints
+        output = []
+        # Since the bottom arc had a negative sweep angle, the top point and the bottom point are reversed, so arc2 needs to connect to the start point
+        for arc1, arc1_point, tip_point in (top_arc1, top_arc1.endSketchPoint, top_teeth_tip_point), \
+                                           (bottom_arc1, bottom_arc1.startSketchPoint, bottom_teeth_tip_point):
+            # the middle point of the 3 point arc is arbitrarily at the midpoint of the start and end point
+            average_x = (arc1_point.geometry.x + tip_point.geometry.x) / 2
+            average_y = (arc1_point.geometry.y + tip_point.geometry.y) / 2
+            average_y *= .995  # It can't be the exact geometric midpoint because it would technically have an infinite radius
+            midpoint = adsk.core.Point3D.create(average_x, average_y, 0)
+            arc2 = sketch_arcs.addByThreePoints(
+                arc1_point, midpoint, tip_point)
+            # The tip point needs to be fixed or else they will move when the constraint is applied
+            tip_point.isFixed = True
+            constraints.addTangent(arc1, arc2)
+            output.append(arc2)
+        return tuple(output)
 
-        # 11 is done after 13 because 11 can't be fully completed until 13
+    def __copy_circular_pattern(self, sketch, entities, count):
+        normal = sketch.xDirection.crossProduct(sketch.yDirection)
+        normal.transformBy(sketch.transform)
+        origin = sketch.origin
+        origin.transformBy(sketch.transform)
 
-        # 12
-        line12_offset_2_x = -self.W()
-        line12_offset_2 = sketch_curves.sketchLines.addByTwoPoints(adsk.core.Point3D.create(line12_offset_2_x, 2 * pitch_circle_radius, 0),
-                                                                   adsk.core.Point3D.create(line12_offset_2_x, 0, 0))
-        constraints.addParallel(line12_offset_2, line12)
-        sketch_dimensions.addOffsetDimension(
-            line12_offset_2, line12, adsk.core.Point3D.create(self.W() / 2, 0, 0))
-        line12_offset_2.isConstruction = True
+        rotationMatrix = adsk.core.Matrix3D.create()
+        step = 2 * math.pi / count
 
-        line34_offset_2_y = pitch_circle_radius - self.V()
-        line34_offset_2 = sketch_curves.sketchLines.addByTwoPoints(adsk.core.Point3D.create(-pitch_circle_radius, line34_offset_2_y, 0),
-                                                                   adsk.core.Point3D.create(pitch_circle_radius, line34_offset_2_y, 0))
-        constraints.addParallel(line34_offset_2, line34)
-        sketch_dimensions.addOffsetDimension(line34_offset_2, line34, adsk.core.Point3D.create(
-            0, pitch_circle_radius + self.V() / 2, 0))
-        line34_offset_2.isConstruction = True
+        for i in range(1, int(count)):
+            rotationMatrix.setToRotation(step * i, normal, origin)
+            sketch.copy(entities, rotationMatrix)
 
-        # 13
-        point_b = sketch_points.add(
-            adsk.core.Point3D.create(self.W() / 2, 0, 0))
-        constraints.addCoincident(point_b, line12_offset_2)
-        constraints.addCoincident(point_b, line34_offset_2)
+    def __extrude(self, sketch):
+        extrudes = self._comp.features.extrudeFeatures
+        prof = sketch.profiles[0]
+        ext_input = extrudes.createInput(
+            prof, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
 
-        circle2 = sketch_curves.sketchCircles.addByCenterRadius(
-            point_b, self.F())
+        distance = adsk.core.ValueInput.createByReal(self.thickness)
+        ext_input.setDistanceExtent(False, distance)
 
-        # 11
-        # doesnt matter where, will be moved when connected with circle2
-        point_z = sketch_points.add(adsk.core.Point3D.create(0, 0, 0))
-        lineyz = sketch_curves.sketchLines.addByTwoPoints(point_y, point_z)
-        constraints.addPerpendicular(lineyz, linecy)
-        constraints.addCoincident(point_z, circle2)
+        extrudes.add(ext_input)
 
-        # 14
-        toothtip_line_angle = 180 / self.N + 90
-        toothtip_line_length = 2 * pitch_circle_radius
-        toothtip_endpoint = adsk.core.Point3D.create(-abs(toothtip_line_length * math.cos(math.radians(toothtip_line_angle))),
-                                                     abs(toothtip_line_length * math.sin(math.radians(toothtip_line_angle))), 0)
-        toothtip_line = sketch_curves.sketchLines.addByTwoPoints(
-            origin, toothtip_endpoint)
-        toothtip_line.isConstruction = True
-        toothtip_line.isFixed = True
+    def build_sprocket(self):
+        sketches = self._comp.sketches
+        xy_plane = self._comp.xYConstructionPlane
+
+        base_sketch = sketches.add(xy_plane)
+
+        # see ./doc/base_sketch.png to see a diagram of these variables
+
+        # the arc1s and the line for the tip of the teeth are created first because they
+        # will create points that can be used to create the arc2s
+        top_arc1, bottom_arc1 = self.__create_arc1s(base_sketch)
+        (top_tip_point, bottom_tip_point), tip_line = self.__create_teeth_tip_line(
+            base_sketch)
+        top_arc2, bottom_arc2 = self.__create_arc2s(
+            base_sketch, top_arc1, bottom_arc1, top_tip_point, bottom_tip_point)
+
+        entities = adsk.core.ObjectCollection.create()
+        for entity in top_arc1, bottom_arc1, tip_line, top_arc2, bottom_arc2:
+            entities.add(entity)
+        self.__copy_circular_pattern(
+            base_sketch, entities, self.number_of_teeth)
+
+        self.__extrude(base_sketch)
 
 
 class CommandExecuteHandler(adsk.core.CommandEventHandler):
@@ -201,15 +173,22 @@ class CommandExecuteHandler(adsk.core.CommandEventHandler):
                 if input.id == 'sprocket_name':
                     sprocket_name = input.value
                 elif input.id == 'chain_pitch':
-                    chain_pitch = input.value
+                    chain_pitch = unitsMgr.evaluateExpression(
+                        input.expression, "in")
                 elif input.id == 'number_of_teeth':
-                    number_of_teeth = input.value
+                    number_of_teeth = int(input.value)
                 elif input.id == 'roller_diameter':
-                    roller_diameter = input.value
+                    roller_diameter = unitsMgr.evaluateExpression(
+                        input.expression, "in")
+                elif input.id == 'sprocket_thickness':
+                    thickness = unitsMgr.evaluateExpression(
+                        input.expression, "in")
 
-            sprocket = SprocketComponent(
-                sprocket_name, chain_pitch, number_of_teeth, roller_diameter)
-            sprocket.build_sprocket()
+            if (sprocket_name and chain_pitch and number_of_teeth and roller_diameter and thickness) \
+                    and (chain_pitch > 0 and number_of_teeth > 0 and roller_diameter > 0):
+                sprocket = SprocketComponent(
+                    sprocket_name, chain_pitch, number_of_teeth, roller_diameter, thickness)
+                sprocket.build_sprocket()
         except:
             if ui:
                 ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
@@ -258,6 +237,8 @@ class CommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
                                  adsk.core.ValueInput.createByReal(default_number_of_teeth))
             inputs.addValueInput('roller_diameter', 'Roller Diameter', 'in',
                                  adsk.core.ValueInput.createByReal(default_roller_diameter))
+            inputs.addValueInput('sprocket_thickness', 'Sprocket Thickness',
+                                 'in', adsk.core.ValueInput.createByReal(default_thickness))
         except:
             if ui:
                 ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
@@ -274,10 +255,9 @@ def run(context):
 
         command = ui.commandDefinitions.itemById('sprocket_generator')
         if not command:
-            command = ui.commandDefinitions.addButtonDefinition('sprocket_generator',
-                                                                'Create sprocket',
-                                                                'Create sprocket sketch',
-                                                                './resources')
+            command = ui.commandDefinitions.addButtonDefinition(
+                'sprocket_generator', 'Create sprocket', 'Create sprocket sketch', './resources')
+
         on_command_created = CommandCreatedHandler()
         command.commandCreated.add(on_command_created)
         handlers.append(on_command_created)
